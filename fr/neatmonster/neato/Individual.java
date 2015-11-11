@@ -6,7 +6,6 @@ import static fr.neatmonster.neato.Population.CONNECT_PERT;
 import static fr.neatmonster.neato.Population.CONNECT_STEP;
 import static fr.neatmonster.neato.Population.DISABLE_MUT;
 import static fr.neatmonster.neato.Population.ENABLE_MUT;
-import static fr.neatmonster.neato.Population.FITNESS;
 import static fr.neatmonster.neato.Population.INPUTS;
 import static fr.neatmonster.neato.Population.LINK_MUT;
 import static fr.neatmonster.neato.Population.NODE_MUT;
@@ -17,28 +16,23 @@ import static fr.neatmonster.neato.Population.isOutput;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class Individual {
-    public final Set<Gene> genotype = new HashSet<Gene>();
+    public final List<Gene> genotype = new ArrayList<Gene>();
 
-    public final Set<Synapse> connects   = new HashSet<Synapse>();
-    public final List<Neuron> inputs     = new ArrayList<Neuron>();
-    public final List<Neuron> hidden     = new ArrayList<Neuron>();
-    public final List<Neuron> outputs    = new ArrayList<Neuron>();
-    public int                nextNeuron = INPUTS + OUTPUTS;
+    public final List<Synapse> connects   = new ArrayList<Synapse>();
+    public final List<Neuron>  inputs     = new ArrayList<Neuron>();
+    public final List<Neuron>  hidden     = new ArrayList<Neuron>();
+    public final List<Neuron>  outputs    = new ArrayList<Neuron>();
+    public int                 nextNeuron = INPUTS + OUTPUTS;
 
-    public double[] fitness  = new double[FITNESS];
+    public double[] fitness;
     public int      ranking  = 0;
     public double   distance = 0.0;
 
-    public Individual() {
-        mutate();
-        generate();
-    }
+    public Individual() {}
 
     public Individual(final Individual mother, final Individual father) {
         nextNeuron = Math.max(mother.nextNeuron, father.nextNeuron);
@@ -52,7 +46,15 @@ public class Individual {
                         break;
             genotype.add(motherGene.clone());
         }
-        generate();
+    }
+
+    @Override
+    public Individual clone() {
+        final Individual individual = new Individual();
+        individual.nextNeuron = nextNeuron;
+        for (final Gene gene : genotype)
+            individual.genotype.add(gene.clone());
+        return individual;
     }
 
     public boolean dominates(final Individual other) {
@@ -66,7 +68,7 @@ public class Individual {
     }
 
     public void feedForward() {
-        final Set<Neuron> neurons = new HashSet<Neuron>();
+        final List<Neuron> neurons = new ArrayList<Neuron>();
         neurons.addAll(inputs);
         neurons.addAll(hidden);
         neurons.addAll(outputs);
@@ -79,28 +81,31 @@ public class Individual {
 
     public void generate() {
         final Map<Integer, Neuron> neurons = new HashMap<Integer, Neuron>();
+
+        for (int i = 0; i < INPUTS; ++i) {
+            final Neuron input = new Neuron(i);
+            inputs.add(input);
+            neurons.put(input.neuronId, input);
+        }
+
+        for (int i = 0; i < OUTPUTS; ++i) {
+            final Neuron output = new Neuron(INPUTS + i);
+            outputs.add(output);
+            neurons.put(output.neuronId, output);
+        }
+
         for (final Gene gene : genotype) {
             if (!neurons.containsKey(gene.input)) {
-                final Neuron neuron = new Neuron();
-                if (isInput(gene.input))
-                    inputs.add(neuron);
-                else if (isOutput(gene.input))
-                    outputs.add(neuron);
-                else
-                    hidden.add(neuron);
-                neurons.put(gene.input, neuron);
+                final Neuron neuron = new Neuron(gene.input);
+                neurons.put(neuron.neuronId, neuron);
+                hidden.add(neuron);
             }
             final Neuron input = neurons.get(gene.input);
 
             if (!neurons.containsKey(gene.output)) {
-                final Neuron neuron = new Neuron();
-                if (isInput(gene.output))
-                    inputs.add(neuron);
-                else if (isOutput(gene.output))
-                    outputs.add(neuron);
-                else
-                    hidden.add(neuron);
-                neurons.put(gene.output, neuron);
+                final Neuron neuron = new Neuron(gene.output);
+                neurons.put(neuron.neuronId, neuron);
+                hidden.add(neuron);
             }
             final Neuron output = neurons.get(gene.output);
 
@@ -126,21 +131,21 @@ public class Individual {
 
     public void mutate() {
         if (RANDOM.nextDouble() < CONNECT_MUT)
-            for (final Gene connect : genotype)
+            for (final Gene gene : genotype)
                 if (RANDOM.nextDouble() < CONNECT_PERT) {
                     final double perturbation = 2.0 * CONNECT_STEP
                             * RANDOM.nextDouble() - CONNECT_STEP;
-                    connect.weight = connect.weight + perturbation;
+                    gene.weight = gene.weight + perturbation;
                 } else
-                    connect.weight = 2.0 * RANDOM.nextDouble() - 1.0;
+                    gene.weight = 2.0 * RANDOM.nextDouble() - 1.0;
 
-        for (final Gene connect : genotype)
-            if (connect.enabled && RANDOM.nextDouble() < DISABLE_MUT)
-                connect.enabled = false;
+        for (final Gene gene : genotype)
+            if (gene.enabled && RANDOM.nextDouble() < DISABLE_MUT)
+                gene.enabled = false;
 
-        for (final Gene connect : genotype)
-            if (!connect.enabled && RANDOM.nextDouble() < ENABLE_MUT)
-                connect.enabled = true;
+        for (final Gene gene : genotype)
+            if (!gene.enabled && RANDOM.nextDouble() < ENABLE_MUT)
+                gene.enabled = true;
 
         if (RANDOM.nextDouble() < LINK_MUT) {
             int input, output;

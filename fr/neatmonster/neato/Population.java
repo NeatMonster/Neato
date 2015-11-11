@@ -20,11 +20,11 @@ public class Population {
     public static final double CONNECT_MUT  = 0.80;
     public static final double CONNECT_PERT = 0.90;
     public static final double CONNECT_STEP = 0.10;
-    public static final double ENABLE_MUT   = 0.05;
-    public static final double DISABLE_MUT  = 0.10;
-    public static final double LINK_MUT     = 0.50;
-    public static final double BIAS_MUT     = 0.05;
-    public static final double NODE_MUT     = 0.05;
+    public static final double ENABLE_MUT   = 0.01;
+    public static final double DISABLE_MUT  = 0.02;
+    public static final double LINK_MUT     = 0.10;
+    public static final double BIAS_MUT     = 0.01;
+    public static final double NODE_MUT     = 0.01;
 
     public static final Random RANDOM = new Random();
 
@@ -62,8 +62,12 @@ public class Population {
     public Ensemble               ensemble   = null;
 
     public Population() {
-        for (int i = 0; i < POPULATION; ++i)
-            phenotypes.add(new Individual());
+        for (int i = 0; i < POPULATION; ++i) {
+            final Individual creature = new Individual();
+            creature.mutate();
+            creature.generate();
+            phenotypes.add(creature);
+        }
     }
 
     public void addChildren() {
@@ -82,17 +86,28 @@ public class Population {
                 father = tmp;
             }
 
-            children.add(new Individual(mother, father));
+            final Individual child = new Individual(mother, father);
+            child.generate();
+            children.add(child);
         }
+
+        for (int i = crossovers; i < POPULATION; ++i) {
+            final Individual mutation = tournament().clone();
+            mutation.mutate();
+            mutation.generate();
+            children.add(mutation);
+        }
+
+        phenotypes.addAll(children);
     }
 
     public void calcDist() {
         final Map<Integer, List<Individual>> fronts = new HashMap<Integer, List<Individual>>();
+
         for (final Individual creature : phenotypes) {
             final int rank = creature.ranking;
             if (!fronts.containsKey(rank))
                 fronts.put(rank, new ArrayList<Individual>());
-
             fronts.get(rank).add(creature);
         }
 
@@ -121,13 +136,13 @@ public class Population {
                 maxSol.distance = Double.MAX_VALUE;
                 final double max = maxSol.fitness[index];
 
-                for (int k = 1; k < front.size() - 2; ++k) {
-                    final Individual sol = front.get(k);
+                for (int j = 1; j < front.size() - 2; ++j) {
+                    final Individual sol = front.get(j);
                     if (sol.distance == Double.MAX_VALUE)
                         continue;
 
-                    final double next = front.get(k + 1).fitness[index];
-                    final double prev = front.get(k - 1).fitness[index];
+                    final double next = front.get(j + 1).fitness[index];
+                    final double prev = front.get(j - 1).fitness[index];
                     sol.distance += (next - prev) / (max - min);
                 }
             }

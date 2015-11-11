@@ -1,17 +1,22 @@
 package fr.neatmonster.neato;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Neuron {
     public static double sigmoid(final double x) {
         return 2.0 / (1.0 + Math.exp(-4.9 * x)) - 1.0;
     }
 
-    public final Set<Synapse> inputs  = new HashSet<Synapse>();
-    public final Set<Synapse> outputs = new HashSet<Synapse>();
-    public double             value   = 0.0;
-    public boolean            updated = false;
+    public final int           neuronId;
+    public final List<Synapse> inputs  = new ArrayList<Synapse>();
+    public final List<Synapse> outputs = new ArrayList<Synapse>();
+    public double              value   = 0.0;
+    public boolean             updated = false;
+
+    public Neuron(final int neuronId) {
+        this.neuronId = neuronId;
+    }
 
     public void feedForward() {
         if (updated)
