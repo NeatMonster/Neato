@@ -13,9 +13,9 @@ public class Population {
     public static final int INPUTS     = 62;
     public static final int OUTPUTS    = 6;
     public static final int FITNESS    = 5;
+    public static final int STALENESS  = 30;
 
-    public static final double TOURNAMENT = 0.20;
-    public static final double CROSSOVER  = 0.75;
+    public static final double CROSSOVER = 0.75;
 
     public static final double CONNECT_MUT  = 0.80;
     public static final double CONNECT_PERT = 0.90;
@@ -26,6 +26,10 @@ public class Population {
     public static final double BIAS_MUT     = 0.01;
     public static final double NODE_MUT     = 0.01;
 
+    public static final double DELTA_DISJOINT  = 2.0;
+    public static final double DELTA_WEIGHTS   = 0.4;
+    public static final double DELTA_THRESHOLD = 1.0;
+
     public static final Random RANDOM = new Random();
 
     public static Comparator<Individual> RANK_CMP = new Comparator<Individual>() {
@@ -35,6 +39,7 @@ public class Population {
             return o1.ranking - o2.ranking;
         }
     };
+
     public static Comparator<Individual> DIST_CMP = new Comparator<Individual>() {
 
         @Override
@@ -43,8 +48,16 @@ public class Population {
             if (cmpRank != 0)
                 return cmpRank;
 
-            final double cmpDist = o1.distance - o2.distance;
-            return cmpDist > 0.0 ? -1 : cmpDist < 0.0 ? 1 : 0;
+            final double cmpDist = o2.distance - o1.distance;
+            return cmpDist > 0.0 ? 1 : cmpDist < 0.0 ? -1 : 0;
+        }
+    };
+
+    public static Comparator<Individual> GLOB_CMP = new Comparator<Individual>() {
+
+        @Override
+        public int compare(final Individual o1, final Individual o2) {
+            return o2.global - o1.global;
         }
     };
 
@@ -58,47 +71,29 @@ public class Population {
         return neuronId >= INPUTS && neuronId < INPUTS + OUTPUTS;
     }
 
-    public final List<Individual> phenotypes = new ArrayList<Individual>();
     public Ensemble               ensemble   = null;
+    public final List<Species>    species    = new ArrayList<Species>();
+    public final List<Individual> phenotypes = new ArrayList<Individual>();
 
     public Population() {
         for (int i = 0; i < POPULATION; ++i) {
             final Individual creature = new Individual();
             creature.mutate();
             creature.generate();
-            phenotypes.add(creature);
+            addToSpecies(creature);
         }
     }
 
-    public void addChildren() {
-        final List<Individual> children = new ArrayList<Individual>();
-
-        final int crossovers = (int) (POPULATION * CROSSOVER);
-        for (int i = 0; i < crossovers; ++i) {
-            Individual mother = tournament(), father;
-            do
-                father = tournament();
-            while (mother.equals(father));
-
-            if (mother.ranking < father.ranking) {
-                final Individual tmp = mother;
-                mother = father;
-                father = tmp;
+    public void addToSpecies(final Individual creature) {
+        for (final Species species : this.species)
+            if (creature.sameSpecies(species.members.get(0))) {
+                species.members.add(creature);
+                return;
             }
 
-            final Individual child = new Individual(mother, father);
-            child.generate();
-            children.add(child);
-        }
-
-        for (int i = crossovers; i < POPULATION; ++i) {
-            final Individual mutation = tournament().clone();
-            mutation.mutate();
-            mutation.generate();
-            children.add(mutation);
-        }
-
-        phenotypes.addAll(children);
+        final Species newSpecies = new Species();
+        newSpecies.members.add(creature);
+        species.add(newSpecies);
     }
 
     public void calcDist() {
@@ -165,26 +160,103 @@ public class Population {
             }
     }
 
-    public void cullPop() {
-        final List<Individual> newPhenotypes = new ArrayList<Individual>(
-                phenotypes.subList(0, POPULATION));
+    public void cullSpecies(final boolean cutToOne) {
+        for (final Species species : this.species) {
+            Collections.sort(species.members, GLOB_CMP);
+
+            double remaining = 1.0;
+            if (!cutToOne)
+                remaining = Math.ceil(species.members.size() / 2.0);
+
+            while (species.members.size() > remaining)
+                species.members.remove(species.members.size() - 1);
+        }
+    }
+
+    public void listAll() {
         phenotypes.clear();
-        phenotypes.addAll(newPhenotypes);
+        for (final Species species : this.species)
+            for (final Individual creature : species.members)
+                phenotypes.add(creature);
     }
 
-    public void firstEvol() {
-        calcRank();
-        Collections.sort(phenotypes, RANK_CMP);
-        addChildren();
+    public void newGeneration() {
+        rankGlobally();
+        cullSpecies(false);
+
+        rankGlobally();
+        removeStaleSpecies();
+
+        rankGlobally();
+        for (final Species species : this.species)
+            species.calcAvgGlobal();
+        removeWeakSpecies();
+
+        final List<Individual> children = new ArrayList<Individual>();
+
+        final double sum = totalAvgGlobal();
+        for (final Species species : this.species) {
+            final double breed = Math
+                    .floor(POPULATION * species.avgGlobal / sum);
+            for (int i = 0; i < breed - 1.0; ++i)
+                children.add(species.breedChild());
+        }
+
+        cullSpecies(true);
+
+        while (children.size() + species.size() < POPULATION)
+            children.add(
+                    species.get(RANDOM.nextInt(species.size())).breedChild());
+
+        for (final Individual child : children)
+            addToSpecies(child);
+
+        setEnsemble();
     }
 
-    public void secondEvol() {
+    public void rankGlobally() {
+        listAll();
         calcRank();
         Collections.sort(phenotypes, RANK_CMP);
         calcDist();
         Collections.sort(phenotypes, DIST_CMP);
-        cullPop();
-        setEnsemble();
+        for (int i = 0; i < phenotypes.size(); ++i)
+            phenotypes.get(i).global = POPULATION - i;
+    }
+
+    public void removeStaleSpecies() {
+        final List<Species> survived = new ArrayList<Species>();
+
+        for (final Species species : this.species) {
+            Collections.sort(species.members, GLOB_CMP);
+
+            if (species.members.get(0).global > species.topGlobal) {
+                species.topGlobal = species.members.get(0).global;
+                species.staleness = 0;
+            } else
+                ++species.staleness;
+
+            if (species.staleness < STALENESS)
+                survived.add(species);
+        }
+
+        species.clear();
+        species.addAll(survived);
+    }
+
+    public void removeWeakSpecies() {
+        final List<Species> survived = new ArrayList<Species>();
+
+        final double sum = totalAvgGlobal();
+        for (final Species species : this.species) {
+            final double breed = Math
+                    .floor(POPULATION * species.avgGlobal / sum);
+            if (breed >= 1.0)
+                survived.add(species);
+        }
+
+        species.clear();
+        species.addAll(survived);
     }
 
     public void setEnsemble() {
@@ -195,11 +267,10 @@ public class Population {
                 ensemble.elements.add(element);
     }
 
-    public Individual tournament() {
-        for (final Individual creature : phenotypes)
-            if (RANDOM.nextDouble() < TOURNAMENT)
-                return creature;
-
-        return phenotypes.get(0);
+    public double totalAvgGlobal() {
+        double total = 0.0;
+        for (final Species species : this.species)
+            total += species.avgGlobal;
+        return total;
     }
 }

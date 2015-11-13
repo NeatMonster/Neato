@@ -4,6 +4,9 @@ import static fr.neatmonster.neato.Population.BIAS_MUT;
 import static fr.neatmonster.neato.Population.CONNECT_MUT;
 import static fr.neatmonster.neato.Population.CONNECT_PERT;
 import static fr.neatmonster.neato.Population.CONNECT_STEP;
+import static fr.neatmonster.neato.Population.DELTA_DISJOINT;
+import static fr.neatmonster.neato.Population.DELTA_THRESHOLD;
+import static fr.neatmonster.neato.Population.DELTA_WEIGHTS;
 import static fr.neatmonster.neato.Population.DISABLE_MUT;
 import static fr.neatmonster.neato.Population.ENABLE_MUT;
 import static fr.neatmonster.neato.Population.INPUTS;
@@ -31,17 +34,18 @@ public class Individual {
     public double[] fitness;
     public int      ranking  = 0;
     public double   distance = 0.0;
+    public int      global   = 0;
 
     public Individual() {}
 
     public Individual(final Individual mother, final Individual father) {
         nextNeuron = Math.max(mother.nextNeuron, father.nextNeuron);
-        looping: for (final Gene motherGene : mother.genotype) {
+        matching: for (final Gene motherGene : mother.genotype) {
             for (final Gene fatherGene : father.genotype)
                 if (motherGene.innovation == fatherGene.innovation)
                     if (RANDOM.nextBoolean()) {
                         genotype.add(fatherGene.clone());
-                        continue looping;
+                        continue matching;
                     } else
                         break;
             genotype.add(motherGene.clone());
@@ -55,6 +59,17 @@ public class Individual {
         for (final Gene gene : genotype)
             individual.genotype.add(gene.clone());
         return individual;
+    }
+
+    public double disjoint(final Individual other) {
+        double disjointGenes = 0.0;
+        searching: for (final Gene gene : genotype) {
+            for (final Gene otherGene : other.genotype)
+                if (gene.innovation == otherGene.innovation)
+                    continue searching;
+            ++disjointGenes;
+        }
+        return disjointGenes / Math.max(genotype.size(), other.genotype.size());
     }
 
     public boolean dominates(final Individual other) {
@@ -227,8 +242,26 @@ public class Individual {
         return neurons.get(RANDOM.nextInt(neurons.size()));
     }
 
+    public boolean sameSpecies(final Individual other) {
+        final double dd = DELTA_DISJOINT * disjoint(other);
+        final double dw = DELTA_WEIGHTS * weights(other);
+        return dd + dw < DELTA_THRESHOLD;
+    }
+
     public void setInput(final double[] input) {
         for (int i = 0; i < INPUTS; ++i)
             inputs.get(i).value = input[i];
+    }
+
+    public double weights(final Individual other) {
+        double sum = 0.0, coincident = 0.0;
+        searching: for (final Gene gene : genotype)
+            for (final Gene otherGene : other.genotype)
+                if (gene.innovation == otherGene.innovation) {
+                    sum += Math.abs(gene.weight - otherGene.weight);
+                    ++coincident;
+                    continue searching;
+                }
+        return sum / coincident;
     }
 }
