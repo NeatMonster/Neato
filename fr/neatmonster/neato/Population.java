@@ -10,21 +10,22 @@ import java.util.Random;
 
 public class Population {
     public static final int POPULATION = 250;
-    public static final int INPUTS     = 62;
-    public static final int OUTPUTS    = 6;
-    public static final int FITNESS    = 5;
     public static final int STALENESS  = 30;
 
-    public static final double CROSSOVER = 0.75;
+    public static final int    INPUTS  = 62;
+    public static final int    OUTPUTS = 6;
+    public static final int    FITNESS = 5;
+    public static final double EPSILON = 0.001;
 
+    public static final double CROSSOVER    = 0.75;
     public static final double CONNECT_MUT  = 0.80;
     public static final double CONNECT_PERT = 0.90;
     public static final double CONNECT_STEP = 0.10;
-    public static final double ENABLE_MUT   = 0.01;
-    public static final double DISABLE_MUT  = 0.02;
-    public static final double LINK_MUT     = 0.10;
-    public static final double BIAS_MUT     = 0.01;
-    public static final double NODE_MUT     = 0.01;
+    public static final double ENABLE_MUT   = 0.05;
+    public static final double DISABLE_MUT  = 0.10;
+    public static final double LINK_MUT     = 0.50;
+    public static final double BIAS_MUT     = 0.05;
+    public static final double NODE_MUT     = 0.05;
 
     public static final double DELTA_DISJOINT  = 2.0;
     public static final double DELTA_WEIGHTS   = 0.4;

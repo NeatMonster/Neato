@@ -32,5 +32,7 @@ public class Neuron {
 
         for (final Synapse connect : outputs)
             connect.output.feedForward();
+
+        updated = false;
     }
 }

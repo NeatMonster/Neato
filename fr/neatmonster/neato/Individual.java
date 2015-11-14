@@ -83,13 +83,6 @@ public class Individual {
     }
 
     public void feedForward() {
-        final List<Neuron> neurons = new ArrayList<Neuron>();
-        neurons.addAll(inputs);
-        neurons.addAll(hidden);
-        neurons.addAll(outputs);
-        for (final Neuron neuron : neurons)
-            neuron.updated = false;
-
         for (final Neuron input : inputs)
             input.feedForward();
     }
