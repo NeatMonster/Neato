@@ -1,14 +1,10 @@
 package fr.neatmonster.neato;
 
-import static fr.neatmonster.neato.Population.BIAS_MUT;
 import static fr.neatmonster.neato.Population.CONNECT_MUT;
 import static fr.neatmonster.neato.Population.CONNECT_PERT;
-import static fr.neatmonster.neato.Population.CONNECT_STEP;
-import static fr.neatmonster.neato.Population.DELTA_DISJOINT;
-import static fr.neatmonster.neato.Population.DELTA_THRESHOLD;
-import static fr.neatmonster.neato.Population.DELTA_WEIGHTS;
 import static fr.neatmonster.neato.Population.DISABLE_MUT;
 import static fr.neatmonster.neato.Population.ENABLE_MUT;
+import static fr.neatmonster.neato.Population.FITNESS;
 import static fr.neatmonster.neato.Population.INPUTS;
 import static fr.neatmonster.neato.Population.LINK_MUT;
 import static fr.neatmonster.neato.Population.NODE_MUT;
@@ -34,23 +30,8 @@ public class Individual {
     public double[] fitness;
     public int      ranking  = 0;
     public double   distance = 0.0;
-    public int      global   = 0;
 
     public Individual() {}
-
-    public Individual(final Individual mother, final Individual father) {
-        nextNeuron = Math.max(mother.nextNeuron, father.nextNeuron);
-        matching: for (final Gene motherGene : mother.genotype) {
-            for (final Gene fatherGene : father.genotype)
-                if (motherGene.innovation == fatherGene.innovation)
-                    if (RANDOM.nextBoolean()) {
-                        genotype.add(fatherGene.clone());
-                        continue matching;
-                    } else
-                        break;
-            genotype.add(motherGene.clone());
-        }
-    }
 
     @Override
     public Individual clone() {
@@ -61,21 +42,15 @@ public class Individual {
         return individual;
     }
 
-    public double disjoint(final Individual other) {
-        double disjointGenes = 0.0;
-        searching: for (final Gene gene : genotype) {
-            for (final Gene otherGene : other.genotype)
-                if (gene.innovation == otherGene.innovation)
-                    continue searching;
-            ++disjointGenes;
-        }
-        return disjointGenes / Math.max(genotype.size(), other.genotype.size());
-    }
-
     public boolean dominates(final Individual other) {
         boolean dominates = false;
-        for (int i = 0; i < fitness.length; ++i)
-            if (fitness[i] < other.fitness[i])
+        for (int i = 0; i < FITNESS.length; ++i)
+            if (FITNESS[i]) {
+                if (fitness[i] > other.fitness[i])
+                    return false;
+                else if (fitness[i] < other.fitness[i])
+                    dominates = true;
+            } else if (fitness[i] < other.fitness[i])
                 return false;
             else if (fitness[i] > other.fitness[i])
                 dominates = true;
@@ -140,41 +115,19 @@ public class Individual {
     public void mutate() {
         if (RANDOM.nextDouble() < CONNECT_MUT)
             for (final Gene gene : genotype)
-                if (RANDOM.nextDouble() < CONNECT_PERT) {
-                    final double perturbation = 2.0 * CONNECT_STEP
-                            * RANDOM.nextDouble() - CONNECT_STEP;
-                    gene.weight = gene.weight + perturbation;
-                } else
+                if (RANDOM.nextDouble() < CONNECT_PERT)
                     gene.weight = 2.0 * RANDOM.nextDouble() - 1.0;
-
-        for (final Gene gene : genotype)
-            if (gene.enabled && RANDOM.nextDouble() < DISABLE_MUT)
-                gene.enabled = false;
-
-        for (final Gene gene : genotype)
-            if (!gene.enabled && RANDOM.nextDouble() < ENABLE_MUT)
-                gene.enabled = true;
+                else if (RANDOM.nextDouble() < DISABLE_MUT)
+                    gene.enabled = false;
+                else if (RANDOM.nextDouble() < ENABLE_MUT)
+                    gene.enabled = true;
 
         if (RANDOM.nextDouble() < LINK_MUT) {
             int input, output;
             do {
-                input = randomNeuron(true, true);
-                output = randomNeuron(false, true);
+                input = randomNeuron(true);
+                output = randomNeuron(false);
             } while (input == output || isOutput(input) && isOutput(output));
-
-            final Gene gene = new Gene();
-            gene.input = input;
-            gene.output = output;
-            gene.innovation = ++Population.nextInnovation;
-            genotype.add(gene);
-        }
-
-        if (RANDOM.nextDouble() < BIAS_MUT) {
-            final int input = INPUTS - 1;
-            int output;
-            do
-                output = randomNeuron(false, true);
-            while (input == output);
 
             final Gene gene = new Gene();
             gene.input = input;
@@ -202,6 +155,7 @@ public class Individual {
                 final Gene outputGene = new Gene();
                 outputGene.input = nextNeuron;
                 outputGene.output = gene.output;
+                outputGene.weight = gene.weight;
                 outputGene.innovation = ++Population.nextInnovation;
 
                 ++nextNeuron;
@@ -212,49 +166,28 @@ public class Individual {
         }
     }
 
-    private int randomNeuron(final boolean addInput, final boolean addOutput) {
+    private int randomNeuron(final boolean addInput) {
         final List<Integer> neurons = new ArrayList<Integer>();
 
         if (addInput)
             for (int i = 0; i < INPUTS; ++i)
                 neurons.add(i);
 
-        if (addOutput)
-            for (int i = 0; i < OUTPUTS; ++i)
-                neurons.add(INPUTS + i);
+        for (int i = 0; i < OUTPUTS; ++i)
+            neurons.add(INPUTS + i);
 
         for (final Gene gene : genotype) {
-            if ((addInput || !isInput(gene.input))
-                    && (addOutput || !isOutput(gene.input)))
+            if (addInput || !isInput(gene.input))
                 neurons.add(gene.input);
-            if ((addInput || !isInput(gene.output))
-                    && (addOutput || !isOutput(gene.output)))
+            if (addInput || !isInput(gene.output))
                 neurons.add(gene.output);
         }
 
         return neurons.get(RANDOM.nextInt(neurons.size()));
     }
 
-    public boolean sameSpecies(final Individual other) {
-        final double dd = DELTA_DISJOINT * disjoint(other);
-        final double dw = DELTA_WEIGHTS * weights(other);
-        return dd + dw < DELTA_THRESHOLD;
-    }
-
     public void setInput(final double[] input) {
         for (int i = 0; i < INPUTS; ++i)
             inputs.get(i).value = input[i];
-    }
-
-    public double weights(final Individual other) {
-        double sum = 0.0, coincident = 0.0;
-        searching: for (final Gene gene : genotype)
-            for (final Gene otherGene : other.genotype)
-                if (gene.innovation == otherGene.innovation) {
-                    sum += Math.abs(gene.weight - otherGene.weight);
-                    ++coincident;
-                    continue searching;
-                }
-        return sum / coincident;
     }
 }
